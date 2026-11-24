@@ -4,86 +4,251 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mini-Siri: Voice + Face Finder</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tfjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.4/dist/speech-commands.min.js"></script>
   <style>
-    * { box-sizing: border-box; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
-    body { margin: 0; background: #f3f6fc; color: #182230; padding: 20px; }
-    .container { max-width: 1120px; margin: 0 auto; }
-    header { background: #fff; border-radius: 18px; padding: 18px 24px; box-shadow: 0 6px 24px rgba(15,23,42,.06); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:18px; }
-    h1 { margin:0; font-size:1.5rem; } .subtitle { margin:4px 0 0; color:#526071; }
+    * { box-sizing: border-box; font-family: "Segoe UI", system-ui, sans-serif; }
+    body { margin: 0; padding: 20px; background: #f3f6fc; color: #182230; }
+    .container { max-width: 1120px; margin: auto; }
+    header, .card { background: white; border-radius: 18px; padding: 20px; box-shadow: 0 6px 24px #0f172a10; }
+    header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:18px; }
+    h1 { margin:0; font-size:1.5rem; } h2 { margin:0 0 12px; font-size:1.15rem; }
+    .subtitle { color:#526071; margin:4px 0 0; }
     .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-    @media (max-width:860px) { .grid { grid-template-columns:1fr; } }
-    .card { background:#fff; border-radius:18px; padding:20px; box-shadow:0 6px 24px rgba(15,23,42,.06); }
-    .card h2 { margin:0 0 12px; font-size:1.15rem; }
-    .badge { font-size:.78rem; padding:3px 9px; border-radius:999px; background:#e6efff; color:#1d4ed8; font-weight:700; }
-    .sample-row { display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px 14px; margin-bottom:10px; }
-    button { border:none; border-radius:10px; padding:9px 14px; font-weight:700; cursor:pointer; }
-    button:active { transform:scale(.98); } button:disabled { opacity:.45; cursor:not-allowed; }
-    .btn-rec { background:#ef4444; color:#fff; } .btn-train { background:#2563eb; color:#fff; width:100%; padding:12px; font-size:1rem; margin-top:6px; }
-    .btn-start { background:#16a34a; color:#fff; padding:12px 18px; } .btn-stop { background:#475569; color:#fff; padding:12px 18px; }
-    .status-text { margin-top:10px; color:#334155; min-height:20px; }
+    @media(max-width:860px) { .grid { grid-template-columns:1fr; } }
+    .badge { font-size:.78rem; padding:3px 9px; border-radius:999px; background:#e6efff; color:#1d4ed8; }
+    .sample-row { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px 14px; margin-bottom:10px; }
+    button { border:0; border-radius:10px; padding:10px 14px; font-weight:700; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-rec { background:#ef4444; color:white; } .btn-train { width:100%; margin-top:6px; padding:12px; background:#2563eb; color:white; }
+    .btn-start { background:#16a34a; color:white; padding:12px 18px; } .btn-stop { background:#475569; color:white; padding:12px 18px; }
+    .status-text { min-height:24px; margin-top:10px; color:#334155; overflow-wrap:anywhere; }
     .camera-box { position:relative; width:100%; aspect-ratio:4/3; background:#0f172a; border-radius:16px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
     video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
-    .spotlight-banner { position:absolute; inset:0; border:8px solid #22c55e; border-radius:16px; pointer-events:none; display:none; box-shadow:inset 0 0 40px rgba(34,197,94,.45); }
+    .spotlight-banner { position:absolute; inset:0; border:8px solid #22c55e; display:none; pointer-events:none; }
     .spotlight-banner.active { display:block; }
-    .found-tag { position:absolute; top:14px; left:14px; background:#16a34a; color:#fff; font-weight:800; padding:8px 14px; border-radius:12px; display:none; }
+    .found-tag { position:absolute; top:14px; left:14px; background:#16a34a; color:white; font-weight:800; padding:8px 14px; border-radius:12px; display:none; }
     .found-tag.active { display:block; }
-    .meter-wrap { margin-top:12px; } .meter-label { display:flex; justify-content:space-between; font-size:.88rem; font-weight:600; margin-bottom:4px; }
-    .bar-bg { height:12px; background:#e2e8f0; border-radius:999px; overflow:hidden; } .bar-fill { height:100%; width:0%; background:#2563eb; transition:width .12s ease; }
+    .meter-wrap { margin-top:12px; } .meter-label { display:flex; justify-content:space-between; font-size:.9rem; font-weight:600; margin-bottom:4px; }
+    .bar-bg { height:12px; background:#e2e8f0; border-radius:999px; overflow:hidden; } .bar-fill { height:100%; width:0; background:#2563eb; }
     .siri-bubble { margin-top:14px; padding:14px 16px; border-radius:14px; background:#eff6ff; border-left:5px solid #2563eb; font-weight:600; }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <div><h1>🎙️👀 Mini-Siri: Call "Michael" to Find Him!</h1><p class="subtitle">Train voice & face samples, then press Start Siri Mode.</p></div>
+      <div><h1>🎙️👀 Mini-Siri: Find Michael</h1><p class="subtitle">Allow microphone and camera access, collect examples, then train both models.</p></div>
       <div><button id="btnStartSiri" class="btn-start" disabled>▶ Start Siri Mode</button> <button id="btnStopSiri" class="btn-stop" disabled>⏹ Stop</button></div>
     </header>
     <div class="grid">
-      <div class="card">
-        <h2>Step 1: Train Voice <span class="badge">Mic</span></h2>
-        <div class="sample-row"><div><strong>Background Noise</strong> <span id="voiceBgCount">(0 clips)</span></div><button id="btnRecVoiceBg" class="btn-rec">● Record (2s)</button></div>
-        <div class="sample-row"><div><strong>Say "Michael!"</strong> <span id="voiceMichaelCount">(0 clips)</span></div><button id="btnRecVoiceMichael" class="btn-rec">● Record (2s)</button></div>
+      <section class="card">
+        <h2>Step 1: Train Voice <span class="badge">Microphone</span></h2>
+        <div class="sample-row"><strong>Background noise <span id="voiceBgCount">(0 clips)</span></strong><button id="btnRecVoiceBg" class="btn-rec">Record samples</button></div>
+        <div class="sample-row"><strong>Say “Michael!” <span id="voiceMichaelCount">(0 clips)</span></strong><button id="btnRecVoiceMichael" class="btn-rec">Record samples</button></div>
         <button id="btnTrainVoice" class="btn-train" disabled>🧠 Train Voice Model</button>
-        <div id="voiceStatus" class="status-text">Record at least 3 clips each, then train.</div>
-        <hr style="margin:20px 0;border:none;border-top:1px solid #e2e8f0">
+        <div id="voiceStatus" class="status-text" role="status">Loading voice model…</div>
+        <hr style="margin:20px 0;border:0;border-top:1px solid #e2e8f0">
         <h2>Step 2: Train Face <span class="badge">Camera</span></h2>
-        <div class="sample-row"><div><strong>Not Michael / Empty</strong> <span id="faceOtherCount">(0 photos)</span></div><button id="btnSnapFaceOther" class="btn-rec">📸 Snap Photo</button></div>
-        <div class="sample-row"><div><strong>Michael's Face</strong> <span id="faceMichaelCount">(0 photos)</span></div><button id="btnSnapFaceMichael" class="btn-rec">📸 Snap Photo</button></div>
+        <div class="sample-row"><strong>Not Michael / empty <span id="faceOtherCount">(0 photos)</span></strong><button id="btnSnapFaceOther" class="btn-rec">📸 Capture</button></div>
+        <div class="sample-row"><strong>Michael <span id="faceMichaelCount">(0 photos)</span></strong><button id="btnSnapFaceMichael" class="btn-rec">📸 Capture</button></div>
         <button id="btnTrainFace" class="btn-train" disabled>🧠 Train Face Model</button>
-        <div id="faceStatus" class="status-text">Snap at least 8 photos each (angles/distances), then train.</div>
-      </div>
-      <div class="card">
+        <div id="faceStatus" class="status-text" role="status">Starting camera…</div>
+      </section>
+      <section class="card">
         <h2>Live Camera & Siri Response</h2>
         <div class="camera-box"><video id="webcam" autoplay playsinline muted></video><div id="spotlightBanner" class="spotlight-banner"></div><div id="foundTag" class="found-tag">✨ Found Michael!</div></div>
-        <div class="meter-wrap"><div class="meter-label"><span>Voice Confidence ("Michael")</span><span id="voiceScoreText">0%</span></div><div class="bar-bg"><div id="voiceScoreBar" class="bar-fill"></div></div></div>
-        <div class="meter-wrap"><div class="meter-label"><span>Face Match ("Michael")</span><span id="faceScoreText">0%</span></div><div class="bar-bg"><div id="faceScoreBar" class="bar-fill" style="background:#16a34a"></div></div></div>
-        <div id="siriBubble" class="siri-bubble">Siri is waiting for training...</div>
-      </div>
+        <div class="meter-wrap"><div class="meter-label"><span>Voice confidence</span><span id="voiceScoreText">0%</span></div><div class="bar-bg"><div id="voiceScoreBar" class="bar-fill"></div></div></div>
+        <div class="meter-wrap"><div class="meter-label"><span>Face match</span><span id="faceScoreText">0%</span></div><div class="bar-bg"><div id="faceScoreBar" class="bar-fill" style="background:#16a34a"></div></div></div>
+        <div id="siriBubble" class="siri-bubble">Waiting for training…</div>
+      </section>
     </div>
   </div>
 <script>
-const $=id=>document.getElementById(id);
-const webcamEl=$('webcam'), voiceStatus=$('voiceStatus'), faceStatus=$('faceStatus'), siriBubble=$('siriBubble');
-let baseRecognizer=null, voiceTransfer=null, voiceTrained=false, voiceCounts={Background:0,Michael:0};
-let faceSamples={Other:[],Michael:[]}, faceModel=null, faceTrained=false, siriRunning=false, spotlightTimer=null;
+'use strict';
+const $ = id => document.getElementById(id);
+const webcam = $('webcam');
+let baseRecognizer = null, voiceTransfer = null, voiceTrained = false;
+let voiceCounts = { Background: 0, Michael: 0 };
+let faceSamples = { Other: [], Michael: [] }, faceModel = null, faceTrained = false;
+let siriRunning = false, spotlightTimer = null;
 
-async function initCamera(){try{const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480},audio:false});webcamEl.srcObject=stream}catch(err){faceStatus.textContent='Camera access denied or unavailable: '+err.message}}
-async function initVoiceRecognizer(){voiceStatus.textContent='Loading speech model...';baseRecognizer=speechCommands.create('BROWSER_FFT');await baseRecognizer.ensureModelLoaded();voiceTransfer=baseRecognizer.createTransfer('mini-siri-voice');voiceStatus.textContent='Ready to record voice clips!'}
-function updateVoiceButtons(){ $('btnTrainVoice').disabled=!(voiceCounts.Background>=2&&voiceCounts.Michael>=2); $('voiceBgCount').textContent=`(${voiceCounts.Background} clips)`;$('voiceMichaelCount').textContent=`(${voiceCounts.Michael} clips)`;checkCanStart() }
-async function recordVoiceSample(label){if(!voiceTransfer)await initVoiceRecognizer();voiceStatus.textContent=`Recording "${label}" for 2 seconds...`;$('btnRecVoiceBg').disabled=true;$('btnRecVoiceMichael').disabled=true;for(let i=0;i<2;i++)await voiceTransfer.collectExample(label);voiceCounts[label]+=2;voiceStatus.textContent=`Saved "${label}" clip! Total: ${voiceCounts[label]}.`;$('btnRecVoiceBg').disabled=false;$('btnRecVoiceMichael').disabled=false;updateVoiceButtons()}
-async function trainVoiceModel(){ $('btnTrainVoice').disabled=true;voiceStatus.textContent='Training voice model... please wait.';await voiceTransfer.train({epochs:15,callback:{onEpochEnd:async epoch=>{voiceStatus.textContent=`Training voice model... epoch ${epoch+1}/15`}}});voiceTrained=true;voiceStatus.textContent='✅ Voice model trained!';$('btnTrainVoice').disabled=false;checkCanStart() }
-function captureFaceTensor(){return tf.tidy(()=>tf.image.resizeBilinear(tf.browser.fromPixels(webcamEl),[64,64]).toFloat().div(255).expandDims(0))}
-function snapFaceSample(label){if(!webcamEl.videoWidth)return;faceSamples[label].push(captureFaceTensor());$('faceOtherCount').textContent=`(${faceSamples.Other.length} photos)`;$('faceMichaelCount').textContent=`(${faceSamples.Michael.length} photos)`;$('btnTrainFace').disabled=!(faceSamples.Other.length>=5&&faceSamples.Michael.length>=5);faceStatus.textContent=`Captured "${label}" photo!`}
-async function trainFaceModel(){ $('btnTrainFace').disabled=true;faceStatus.textContent='Training face model...';const xsList=[...faceSamples.Other,...faceSamples.Michael], ys=[...faceSamples.Other.map(()=>[1,0]),...faceSamples.Michael.map(()=>[0,1])];const xs=tf.concat(xsList,0),ysTensor=tf.tensor2d(ys);if(faceModel)faceModel.dispose();faceModel=tf.sequential();faceModel.add(tf.layers.conv2d({inputShape:[64,64,3],filters:16,kernelSize:3,activation:'relu'}));faceModel.add(tf.layers.maxPooling2d({poolSize:2}));faceModel.add(tf.layers.conv2d({filters:32,kernelSize:3,activation:'relu'}));faceModel.add(tf.layers.maxPooling2d({poolSize:2}));faceModel.add(tf.layers.flatten());faceModel.add(tf.layers.dense({units:32,activation:'relu'}));faceModel.add(tf.layers.dense({units:2,activation:'softmax'}));faceModel.compile({optimizer:tf.train.adam(.002),loss:'categoricalCrossentropy',metrics:['accuracy']});await faceModel.fit(xs,ysTensor,{epochs:18,batchSize:8,shuffle:true,yieldEvery:'auto'});xs.dispose();ysTensor.dispose();faceTrained=true;faceStatus.textContent='✅ Face model trained!';$('btnTrainFace').disabled=false;checkCanStart() }
-function checkCanStart(){ $('btnStartSiri').disabled=!(voiceTrained&&faceTrained)||siriRunning }
-async function predictFaceScore(){if(!faceModel||!webcamEl.videoWidth)return 0;return tf.tidy(()=>{const probs=faceModel.predict(captureFaceTensor()).dataSync();return probs[1]})}
-function triggerMichaelSpotlight(v,f){$('spotlightBanner').classList.add('active');$('foundTag').classList.add('active');siriBubble.textContent=`🎤 Heard "Michael!" (${Math.round(v*100)}%) → 👀 Michael match ${Math.round(f*100)}%!`;clearTimeout(spotlightTimer);spotlightTimer=setTimeout(()=>{$('spotlightBanner').classList.remove('active');$('foundTag').classList.remove('active')},2200)}
-async function startSiriMode(){if(!voiceTrained||!faceTrained)return;siriRunning=true;$('btnStartSiri').disabled=true;$('btnStopSiri').disabled=false;siriBubble.textContent='🎧 Listening for "Michael!"...';const labels=voiceTransfer.wordLabels(),idx=labels.indexOf('Michael');await voiceTransfer.listen(async result=>{if(!siriRunning)return;const vp=idx>=0?result.scores[idx]:0,pct=Math.round(vp*100);$('voiceScoreText').textContent=pct+'%';$('voiceScoreBar').style.width=pct+'%';if(vp>=.75){const fp=await predictFaceScore(),fpct=Math.round(fp*100);$('faceScoreText').textContent=fpct+'%';$('faceScoreBar').style.width=fpct+'%';fp>=.6?triggerMichaelSpotlight(vp,fp):siriBubble.textContent=`🎤 Heard "Michael!" (${pct}%), camera match ${fpct}% — ask Michael to move into view!`}}, {probabilityThreshold:.5,overlapFactor:.5})}
-async function stopSiriMode(){siriRunning=false;$('btnStopSiri').disabled=true;if(voiceTransfer&&voiceTransfer.isListening())await voiceTransfer.stopListening();$('spotlightBanner').classList.remove('active');$('foundTag').classList.remove('active');siriBubble.textContent='Siri paused. Press Start Siri Mode to listen again.';checkCanStart()}
-$('btnRecVoiceBg').onclick=()=>recordVoiceSample('Background');$('btnRecVoiceMichael').onclick=()=>recordVoiceSample('Michael');$('btnTrainVoice').onclick=trainVoiceModel;$('btnSnapFaceOther').onclick=()=>snapFaceSample('Other');$('btnSnapFaceMichael').onclick=()=>snapFaceSample('Michael');$('btnTrainFace').onclick=trainFaceModel;$('btnStartSiri').onclick=startSiriMode;$('btnStopSiri').onclick=stopSiriMode;
-initCamera();initVoiceRecognizer();
+function showError(element, action, error) {
+  console.error(action, error);
+  element.textContent = `${action} ${error && error.message ? error.message : error} Check browser site permissions and reload.`;
+}
+async function initCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    $('faceStatus').textContent = 'Camera/microphone APIs are unavailable. Open this site over HTTPS in a supported browser.';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+    webcam.srcObject = stream;
+    await new Promise((resolve, reject) => {
+      if (webcam.readyState >= 2 && webcam.videoWidth) return resolve();
+      webcam.onloadeddata = resolve;
+      webcam.onerror = () => reject(new Error('Camera video did not start.'));
+    });
+    await webcam.play();
+    $('faceStatus').textContent = '✅ Camera ready. Capture photos while the person is visible.';
+  } catch (error) {
+    showError($('faceStatus'), 'Camera could not start:', error);
+  }
+}
+async function initVoiceRecognizer() {
+  try {
+    if (!window.tf || !window.speechCommands) throw new Error('Speech/TensorFlow library did not load. Check your internet connection and reload.');
+    $('voiceStatus').textContent = 'Loading speech model…';
+    baseRecognizer = speechCommands.create('BROWSER_FFT');
+    await baseRecognizer.ensureModelLoaded();
+    voiceTransfer = baseRecognizer.createTransfer('mini-siri-voice');
+    $('voiceStatus').textContent = '✅ Voice model ready. Press Record and speak during each sample.';
+  } catch (error) {
+    showError($('voiceStatus'), 'Voice model could not load:', error);
+  }
+}
+function updateVoiceCounts() {
+  $('voiceBgCount').textContent = `(${voiceCounts.Background} clips)`;
+  $('voiceMichaelCount').textContent = `(${voiceCounts.Michael} clips)`;
+  $('btnTrainVoice').disabled = !(voiceCounts.Background >= 3 && voiceCounts.Michael >= 3);
+  checkCanStart();
+}
+async function recordVoiceSample(label) {
+  const buttons = [$('btnRecVoiceBg'), $('btnRecVoiceMichael')];
+  buttons.forEach(button => button.disabled = true);
+  try {
+    if (!voiceTransfer) {
+      await initVoiceRecognizer();
+      if (!voiceTransfer) throw new Error($('voiceStatus').textContent);
+    }
+    $('voiceStatus').textContent = `Recording 3 “${label}” samples. Speak clearly when prompted; allow microphone access.`;
+    for (let i = 0; i < 3; i++) {
+      $('voiceStatus').textContent = `Recording “${label}” sample ${i + 1} of 3…`;
+      await voiceTransfer.collectExample(label);
+      voiceCounts[label]++;
+      updateVoiceCounts();
+    }
+    $('voiceStatus').textContent = `✅ Saved 3 “${label}” samples. Record the other category too.`;
+  } catch (error) {
+    showError($('voiceStatus'), 'Voice sample was not saved:', error);
+  } finally {
+    buttons.forEach(button => button.disabled = false);
+  }
+}
+async function trainVoiceModel() {
+  $('btnTrainVoice').disabled = true;
+  try {
+    $('voiceStatus').textContent = 'Training voice model… keep this page open.';
+    await voiceTransfer.train({ epochs: 15, callback: { onEpochEnd: async epoch => { $('voiceStatus').textContent = `Training voice model… ${epoch + 1}/15`; } } });
+    voiceTrained = true;
+    $('voiceStatus').textContent = '✅ Voice model trained.';
+    checkCanStart();
+  } catch (error) {
+    showError($('voiceStatus'), 'Voice training failed:', error);
+  } finally {
+    $('btnTrainVoice').disabled = !(voiceCounts.Background >= 3 && voiceCounts.Michael >= 3);
+  }
+}
+function captureFaceTensor() {
+  if (webcam.readyState < 2 || !webcam.videoWidth || !webcam.videoHeight) throw new Error('Camera has no ready video frame yet. Wait for the live picture, then try again.');
+  return tf.tidy(() => tf.image.resizeBilinear(tf.browser.fromPixels(webcam), [64, 64]).toFloat().div(255).expandDims(0));
+}
+function updateFaceCounts() {
+  $('faceOtherCount').textContent = `(${faceSamples.Other.length} photos)`;
+  $('faceMichaelCount').textContent = `(${faceSamples.Michael.length} photos)`;
+  $('btnTrainFace').disabled = !(faceSamples.Other.length >= 5 && faceSamples.Michael.length >= 5);
+}
+function snapFaceSample(label) {
+  try {
+    if (!window.tf) throw new Error('TensorFlow library did not load. Check your internet connection and reload.');
+    faceSamples[label].push(captureFaceTensor());
+    updateFaceCounts();
+    $('faceStatus').textContent = `✅ Captured ${label} photo (${faceSamples[label].length}). Change pose or distance for the next sample.`;
+  } catch (error) {
+    showError($('faceStatus'), 'Photo was not captured:', error);
+  }
+}
+async function trainFaceModel() {
+  $('btnTrainFace').disabled = true;
+  let xs, ys;
+  try {
+    $('faceStatus').textContent = 'Training face model… keep this page open.';
+    const images = [...faceSamples.Other, ...faceSamples.Michael];
+    const labels = [...faceSamples.Other.map(() => [1, 0]), ...faceSamples.Michael.map(() => [0, 1])];
+    xs = tf.concat(images, 0);
+    ys = tf.tensor2d(labels);
+    if (faceModel) faceModel.dispose();
+    faceModel = tf.sequential();
+    faceModel.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 16, kernelSize: 3, activation: 'relu' }));
+    faceModel.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+    faceModel.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }));
+    faceModel.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+    faceModel.add(tf.layers.flatten());
+    faceModel.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+    faceModel.add(tf.layers.dense({ units: 2, activation: 'softmax' }));
+    faceModel.compile({ optimizer: tf.train.adam(0.002), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
+    await faceModel.fit(xs, ys, { epochs: 18, batchSize: 8, shuffle: true, yieldEvery: 'auto' });
+    faceTrained = true;
+    $('faceStatus').textContent = '✅ Face model trained.';
+    checkCanStart();
+  } catch (error) {
+    showError($('faceStatus'), 'Face training failed:', error);
+  } finally {
+    if (xs) xs.dispose();
+    if (ys) ys.dispose();
+    $('btnTrainFace').disabled = !(faceSamples.Other.length >= 5 && faceSamples.Michael.length >= 5);
+  }
+}
+function checkCanStart() { $('btnStartSiri').disabled = !(voiceTrained && faceTrained) || siriRunning; }
+function predictFaceScore() {
+  if (!faceModel) return 0;
+  return tf.tidy(() => faceModel.predict(captureFaceTensor()).dataSync()[1]);
+}
+function spotlight(voice, face) {
+  $('spotlightBanner').classList.add('active'); $('foundTag').classList.add('active');
+  $('siriBubble').textContent = `🎤 Heard “Michael!” (${Math.round(voice * 100)}%) → 👀 Face match ${Math.round(face * 100)}%!`;
+  clearTimeout(spotlightTimer);
+  spotlightTimer = setTimeout(() => { $('spotlightBanner').classList.remove('active'); $('foundTag').classList.remove('active'); }, 2200);
+}
+async function startSiriMode() {
+  try {
+    siriRunning = true; checkCanStart(); $('btnStopSiri').disabled = false;
+    $('siriBubble').textContent = '🎧 Listening for “Michael!”…';
+    const index = voiceTransfer.wordLabels().indexOf('Michael');
+    await voiceTransfer.listen(async result => {
+      if (!siriRunning) return;
+      const voice = index >= 0 ? result.scores[index] : 0, pct = Math.round(voice * 100);
+      $('voiceScoreText').textContent = `${pct}%`; $('voiceScoreBar').style.width = `${pct}%`;
+      if (voice >= 0.75) {
+        try {
+          const face = predictFaceScore(), facePct = Math.round(face * 100);
+          $('faceScoreText').textContent = `${facePct}%`; $('faceScoreBar').style.width = `${facePct}%`;
+          if (face >= 0.6) spotlight(voice, face);
+          else $('siriBubble').textContent = `Heard “Michael!” (${pct}%). Face match ${facePct}%; move into the camera view.`;
+        } catch (error) { showError($('siriBubble'), 'Camera check failed:', error); }
+      }
+    }, { probabilityThreshold: 0.5, overlapFactor: 0.5 });
+  } catch (error) {
+    siriRunning = false; $('btnStopSiri').disabled = true; checkCanStart();
+    showError($('voiceStatus'), 'Listening could not start:', error);
+  }
+}
+async function stopSiriMode() {
+  siriRunning = false; $('btnStopSiri').disabled = true;
+  try { if (voiceTransfer && voiceTransfer.isListening()) await voiceTransfer.stopListening(); } catch (error) { console.error(error); }
+  $('spotlightBanner').classList.remove('active'); $('foundTag').classList.remove('active');
+  $('siriBubble').textContent = 'Siri paused. Press Start Siri Mode to listen again.'; checkCanStart();
+}
+$('btnRecVoiceBg').addEventListener('click', () => recordVoiceSample('Background'));
+$('btnRecVoiceMichael').addEventListener('click', () => recordVoiceSample('Michael'));
+$('btnTrainVoice').addEventListener('click', trainVoiceModel);
+$('btnSnapFaceOther').addEventListener('click', () => snapFaceSample('Other'));
+$('btnSnapFaceMichael').addEventListener('click', () => snapFaceSample('Michael'));
+$('btnTrainFace').addEventListener('click', trainFaceModel);
+$('btnStartSiri').addEventListener('click', startSiriMode);
+$('btnStopSiri').addEventListener('click', stopSiriMode);
+initCamera();
+initVoiceRecognizer();
 </script>
 </body>
 </html>
